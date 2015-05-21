@@ -1,8 +1,12 @@
 {
-    "files": [
-       "/etc/ssh/sshd_config"
-    ],
-    "commands": [
-        "/bin/hostname" 
-    ]
-} 
+  "commands": [
+    {"command": "/sbin/lsmod",  "exclusion_pattern": ["usb","uas"]},
+    {"command": "/sbin/lspci"}
+  ],
+  "files": [
+    {"file": "/etc/ssh/sshd_config", "exclusion_pattern": ["compression", "banner", "HostKey"]},
+    {"file": "/etc/hosts"}, 
+    {"file": "/var/log/redhat-access-insights/redhat-access-insights.log", "exclusion_pattern": []}
+  ],
+  "keywords": ["password", "giraffe", "moo"]
+}

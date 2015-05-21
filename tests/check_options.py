@@ -80,6 +80,8 @@ def test_gpg_verification_disabled_check():
 		pytest.fail("--no-gpg was not able to disable gpg verification")
 
 def test_blacklist_functionality_with_keep_archive():
+	if os.path.isfile("/etc/redhat-access-insights/remove.json"):
+		os.system("rm /etc/redhat-access-insights/remove.json")
 	os.system("cp ./tests/data/remove.json /etc/redhat-access-insights/")
 	if os.path.isfile("/etc/redhat-access-insights/remove.json"):
 		remove_json = subprocess.Popen(["redhat-access-insights --keep-archive"], stdout=subprocess.PIPE,stderr=subprocess.PIPE, shell=True)
@@ -93,16 +95,16 @@ def test_blacklist_functionality_with_keep_archive():
 		os.system("tar -xf %s -C /tmp" % dir_archived)
 		archive_directory = archive_name.split(".tar")[0]
 
-		if os.path.isfile("/tmp/%s/insights_commands/hostname" %archive_directory ):
-			pytest.fail("The command '/bin/hostname' in the remove.json did not get blacklisted")
+		if os.path.isfile("/tmp/%s/insights_commands/lspci" %archive_directory):
+			pytest.fail("The command '/sbin/lspci' in the remove.json did not get blacklisted")
 		else:
-			print "The command '/bin/hostname'from remove.json got blacklisted(not executed) - VERIFIED"
+			print "The command '/sbin/lspci' from remove.json got blacklisted(not executed) - VERIFIED"
 		print "Files in the archived dir:"
 		print os.system("cd /tmp/%s/etc;ls" % archive_directory)
-		if os.path.isfile("/tmp/%s/etc/ssh/sshd_config" %archive_directory ):
-			pytest.fail("The file 'etc/ssh/sshd_config' from remove.json did not get blacklisted")
+		if os.path.isfile("/tmp/%s/etc/hosts" %archive_directory ):
+			pytest.fail("The file 'etc/ssh/hosts' from remove.json did not get blacklisted")
 		else:
-			print "The file 'etc/ssh/sshd_config from remove.json got blacklisted - VERIFIED"
+			print "The file 'etc/hosts from remove.json got blacklisted - VERIFIED"
 		os.system("rm -rf /tmp/%s" %archive_directory)
 		print "deleting archived dir in /tmp/%s" %archive_directory
 

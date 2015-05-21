@@ -1,10 +1,10 @@
 .\" redhat-access-insights.conf - Red Hat Access Insights
 .TH "redhat-access-insights.conf" "8" "" "Red Hat Access Insights Configuration" ""
 .SH "NAME"
-redhat\-access\-insights.conf \- Red Hat Access Insights Agent Configuration
+redhat\-access\-insights.conf \- Red Hat Access Insights client configuration
 
 .SH "DESCRIPTION"
-The \fBredhat\-access\-insights.conf\fP file contains configuration information for \fBredhat\-access\-insights\fP, the agent for the Red Hat Access Insights service. This file is in an INI style format, option=value, default or example values are shown below.
+The \fBredhat\-access\-insights.conf\fP file contains configuration information for \fBredhat\-access\-insights\fP, the client for the Red Hat Access Insights service. This file is in an INI style format, option=value, default or example values are shown below.
 
 [redhat-access-insights]\&
 .IP "loglevel=DEBUG"
@@ -13,39 +13,43 @@ Change log level, valid options DEBUG, INFO, WARNING, ERROR, CRITICAL.
 Automatically attempt to configure connectivity to Red Hat Access Insights
 .IP "authmethod=BASIC"
 Change authentication method, valid options BASIC, CERT. Default BASIC\&
-.IP "upload_url=https://api.access.redhat.com/rs/telemetry"
+.IP "upload_url=https://cert-api.access.redhat.com/r/insights/uploads"
 URL to send uploads to
-.IP "api_url=https://api.access.redhat.com/rs/telemetry/api"
+.IP "api_url=https://cert-api.access.redhat.com/r/insights/"
 URL to send API requests to
-.IP "branch_info_url=https://api.access.redhat.com/rs/telemetry/api/v1/branch_info"
+.IP "branch_info_url=https://cert-api.access.redhat.com/r/insights/v1/branch_info"
 URL to obtain branch information from
-.IP "remove_file=/etc/redhat-access-insights/remove.json"
+.IP "remove_file=/etc/redhat-access-insights/remove.conf"
 File that can be used to prevent files or commands from being collected or to exclude lines containing a specified word.
-This file MUST be in the following format, and MUST match exactly what is in the dynamic_config for file or command name
 .br
-{
-  "commands": [
-    {"command": "/sbin/lsmod",  "exclusion_pattern": ["usb"]},
-    {"command": "/sbin/lspci"}
-  ],
-  "files": [
-    {"file": "/etc/ssh/sshd_config", "exclusion_pattern": ["compression", "banner"]},
-    {"file": "/etc/hosts"}, 
-    {"file": "/var/log/redhat-access-insights/redhat-access-insights.log", "exclusion_pattern": []}
-  ],
-  "keywords": ["password", "giraffe", "moo"]
+Each word specified in patterns will exclude the entire line containing the word in all commands and files.
 .br
-}
+Keywords will be obfuscated to keyword# in all commands and files and require the obfuscate option to be True.
+.br
+This file MUST be in the following format, and MUST match exactly what is in the dynamic_config for file or command name.
+.br
+
+.br
+[remove]
+.br
+files=/etc/cluster/cluster.conf,/etc/hosts
+.br
+commands=/bin/dmseg,/bin/hostname
+.br
+patterns=password,username
+.br
+keywords=super$ecret,ultra$ecret
+.br
 .IP "fallback_file=/etc/redhat-access-insights/.fallback.json"
 Path to .fallback, this is the dynamic config shipped with the RPM
-.IP "dynamic_config_url=https://api.access.redhat.com/rs/telemetry/api/v1/static/uploader.json"
+.IP "dynamic_config_url=https://cert-api.access.redhat.com/r/insights/v1/static/uploader.json"
 URL to retrieve dynamic configuration from.  GPG sig must me at this location + .asc
 .IP "dynamic_config_file=/etc/redhat-access-insights/.cache.json"
 Location of the dynamic configuration
 .IP "auto_update=True"
 Automatically update the dynamic configuration
-.IP "cert_verify=/etc/redhat-access-insights/api.access.redhat.com.pem"
-Location of the certificate chain for api.access.redhat.com used for Certificate Pinning\&
+.IP "cert_verify=/etc/redhat-access-insights/cert-api.access.redhat.com.pem"
+Location of the certificate chain for cert-api.access.redhat.com used for Certificate Pinning\&
 .IP "gpg=True"
 Enable/Disable GPG verification of dynamic configuration
 .IP "obfuscate=True"

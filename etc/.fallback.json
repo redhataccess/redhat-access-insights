@@ -5,7 +5,11 @@
             "file": "/boot/grub/grub.conf"
         },
         {
-            "pattern": [],
+            "pattern": [
+                "<fencedeevice",
+                "<lvm",
+                "clusternode name="
+            ],
             "file": "/etc/cluster/cluster.conf"
         },
         {
@@ -38,7 +42,19 @@
         },
         {
             "pattern": [],
+            "file": "/etc/neutron/neutron.conf"
+        },
+        {
+            "pattern": [],
             "file": "/etc/nscd.conf"
+        },
+        {
+            "pattern": [],
+            "file": "/etc/pam.d/password-auth"
+        },
+        {
+            "pattern": [],
+            "file": "/etc/pam.d/vsftpd"
         },
         {
             "pattern": [],
@@ -46,15 +62,27 @@
         },
         {
             "pattern": [],
-            "file": "/etc/redhat-release"
-        },
-        {
-            "pattern": [],
             "file": "/etc/redhat-access-insights/machine-id"
         },
         {
             "pattern": [],
+            "file": "/etc/redhat-release"
+        },
+        {
+            "pattern": [],
+            "file": "/etc/redhat_access_proactive/machine-id"
+        },
+        {
+            "pattern": [],
             "file": "/etc/rsyslog.conf"
+        },
+        {
+            "pattern": [],
+            "file": "/etc/security/limits.conf"
+        },
+        {
+            "pattern": [],
+            "file": "/etc/security/limits.d/90-nproc.conf"
         },
         {
             "pattern": [],
@@ -67,6 +95,10 @@
         {
             "pattern": [],
             "file": "/etc/sysconfig/dirsrv"
+        },
+        {
+            "pattern": [],
+            "file": "/etc/sysconfig/kdump"
         },
         {
             "pattern": [],
@@ -110,49 +142,67 @@
         },
         {
             "pattern": [],
+            "file": "/proc/scsi/scsi"
+        },
+        {
+            "pattern": [],
             "file": "/sys/devices/system/clocksource/clocksource0/current_clocksource"
         },
         {
+            "pattern": [],
+            "file": "/sys/kernel/kexec_crash_loaded"
+        },
+        {
             "pattern": [
-                "Abort command issued",
-                "dev_watchdog",
                 "swapper: page allocation failure",
-                "Out of MCCQ wrbs",
                 "tg3_start_xmit",
-                "abrtd: Package",
-                "abrtd: Executable",
-                "invoked oom-killer",
                 "Machine",
-                "skb_copy",
-                "mode:0x20",
-                "Dazed and confused, but trying to continue",
-                "soft lockup",
-                "WATCHDOG",
-                "page allocation failure",
                 "Northbridge Error",
                 "be2net",
-                "Uhhuh. NMI received for unknown reason",
                 "kernel: audit: backlog limit exceeded",
+                "abrtd: Executable",
+                "per_source_limit from",
+                "Dazed and confused, but trying to continue",
+                "Uhhuh. NMI received for unknown reason",
+                "dev_watchdog",
+                "SELinux is preventing /usr/sbin/logrotate from getattr access on the file",
+                "abrtd: Package",
+                "page allocation failure",
+                "mode:0x20",
+                "soft lockup",
+                "invoked oom-killer",
+                "WATCHDOG",
+                "Out of MCCQ wrbs",
+                "Abort command issued",
+                "skb_copy",
                 "udevd"
             ],
             "file": "/var/log/messages"
         },
         {
             "pattern": [],
+            "file": "/var/log/yum.log"
+        },
+        {
+            "pattern": [],
             "file": "/var/log/redhat-access-insights/redhat-access-insights.log"
+        },
+        {
+            "pattern": [],
+            "file": "/var/log/redhat_access_proactive/redhat_access_proactive.log"
         }
     ],
     "commands": [
         {
             "pattern": [
                 "crashkernel reservation failed",
-                "Linux version",
-                "P220i",
-                "HP HPSA",
                 "Dropping TSO",
+                "P220i",
+                "Linux version",
+                "HP HPSA",
+                "lo:",
                 "P420i",
                 "CSUM",
-                "lo:",
                 "NUMA: "
             ],
             "command": "/bin/dmesg"
@@ -235,12 +285,28 @@
         },
         {
             "pattern": [],
+            "command": "/usr/bin/ovs-vsctl show"
+        },
+        {
+            "pattern": [],
+            "command": "/usr/bin/uptime"
+        },
+        {
+            "pattern": [],
             "command": "/usr/sbin/blkid -c /dev/null"
         },
         {
             "pattern": [],
             "command": "/usr/sbin/dmidecode"
+        },
+        {
+            "pattern": [],
+            "command": "systemctl list-unit-files"
+        },
+        {
+            "pattern": [],
+            "command": "vgdisplay"
         }
     ],
-    "version": "5"
+    "version": "6"
 }

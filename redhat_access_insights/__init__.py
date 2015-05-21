@@ -13,9 +13,9 @@ import ConfigParser
 import getpass
 import optparse
 import time
+import requests
 from auto_config import try_auto_configuration
-from utilities import (get_satellite_group,
-                       validate_remove_file,
+from utilities import ( validate_remove_file,
                        generate_machine_id)
 from dynamic_config import InsightsConfig
 from data_collector import DataCollector
@@ -42,7 +42,7 @@ def parse_config_file():
     parsedconfig = ConfigParser.RawConfigParser(
         {'loglevel': constants.log_level,
          'app_name': constants.app_name,
-         'auto_config': 'False',
+         'auto_config': 'True',
          'authmethod': constants.auth_method,
          'upload_url': constants.upload_url,
          'api_url': constants.api_url,
@@ -58,12 +58,12 @@ def parse_config_file():
          'proxy': None})
     try:
         parsedconfig.read(constants.default_conf_file)
-    except:
-        pass
+    except ConfigParser.Error:
+        logger.error("ERROR: Could not read configuration file, using defaults")
     try:
         # Try to add the redhat_access_insights section
         parsedconfig.add_section(APP_NAME)
-    except:
+    except ConfigParser.Error:
         pass
     return parsedconfig
 
@@ -135,27 +135,34 @@ def collect_data_and_upload(config, options):
     """
     pconn = InsightsConnection(config)
     pconn.check_registration()
-    branch_info = pconn.branch_info()
+    try:
+        branch_info = pconn.branch_info()
+    except requests.ConnectionError:
+        logger.error("ERROR: Could not connect to determine branch information")
+        sys.exit()
+    except LookupError:
+        logger.error("ERROR: Could not determine branch information")
+        sys.exit()
     pc = InsightsConfig(config, pconn)
     dc = DataCollector()
     start = time.clock()
-    dynamic_config = pc.get_conf(options.update)
+    dynamic_config, rm_conf = pc.get_conf(options.update)
     elapsed = (time.clock() - start)
     logger.debug("Dynamic Config Elapsed Time: %s", elapsed)
     start = time.clock()
     logger.info('Starting to collect Insights data')
-    dc.run_commands(dynamic_config)
+    dc.run_commands(dynamic_config, rm_conf)
     elapsed = (time.clock() - start)
     logger.debug("Command Collection Elapsed Time: %s", elapsed)
     start = time.clock()
-    dc.copy_files(dynamic_config)
+    dc.copy_files(dynamic_config, rm_conf)
     elapsed = (time.clock() - start)
     logger.debug("File Collection Elapsed Time: %s", elapsed)
     dc.write_branch_info(branch_info)
     obfuscate = config.getboolean(APP_NAME, "obfuscate")
 
     if not options.no_tar_file:
-        tar_file = dc.done(config, dynamic_config)
+        tar_file = dc.done(config, rm_conf)
         if not options.no_upload:
             logger.info('Uploading Insights data,'
                         ' this may take a few minutes')
@@ -215,28 +222,21 @@ def set_up_options(parser):
     """
     Add options to the option parser
     """
+    parser.add_option('--version',
+                      help="Display version",
+                      action="store_true",
+                      dest="version",
+                      default=False)
     parser.add_option('--register',
-                      help=('Register system to Red Hat '
-                            'Access Insights Support'),
+                      help=('Register system to the Red Hat '
+                            'Access Insights Service'),
                       action="store_true",
                       dest="register",
                       default=False)
-    parser.add_option('--update',
-                      help='Get new rules from Red Hat',
+    parser.add_option('--update-collection-rules',
+                      help='Refresh collection rules from Red Hat',
                       action="store_true",
                       dest="update",
-                      default=False)
-    parser.add_option('--validate',
-                      help='Validate remove.json',
-                      action="store_true",
-                      dest="validate",
-                      default=False)
-    parser.add_option('--schedule',
-                      help=("Set Red Hat Access Insights's schedule only "
-                            "(no upload).  Must be used with --daily "
-                            "or --weekly"),
-                      action="store_true",
-                      dest="schedule",
                       default=False)
     parser.add_option('--daily',
                       help=("Set Red Hat Access Insights "
@@ -254,52 +254,48 @@ def set_up_options(parser):
                       action="store",
                       help='Group to add this system to during registration',
                       dest="group")
-    parser.add_option('--satellite-group',
-                      help=("Use this system's satellite "
-                            "group during registration"),
+    parser.add_option('--validate',
+                      help='Validate remove.conf',
                       action="store_true",
-                      dest="satellite_group",
+                      dest="validate",
                       default=False)
-    parser.add_option('--test-connection',
+    parser.add_option('--reregister',
+                      help="Reregister this machine to Red Hat",
+                      action="store_true",
+                      dest="reregister",
+                      default=False)
+    group = optparse.OptionGroup(parser, "Debug options")
+    group.add_option('--test-connection',
                       help='Test connectivity to Red Hat',
                       action="store_true",
                       dest="test_connection",
                       default=False)
-    parser.add_option('--verbose',
+    group.add_option('--verbose',
                       help="DEBUG output to stdout",
                       action="store_true",
                       dest="verbose",
                       default=False)
-    parser.add_option('--no-gpg',
+    group.add_option('--no-gpg',
                       help="Do not verify GPG signature",
                       action="store_true",
                       dest="no_gpg",
                       default=False)
-    parser.add_option('--regenerate',
-                      help="Regenerate machine-id",
-                      action="store_true",
-                      dest="regenerate",
-                      default=False)
-    parser.add_option('--no-upload',
+    group.add_option('--no-upload',
                       help="Do not upload the archive",
                       action="store_true",
                       dest="no_upload",
                       default=False)
-    parser.add_option('--no-tar-file',
+    group.add_option('--no-tar-file',
                       help="Build the directory, but do not tar",
                       action="store_true",
                       dest="no_tar_file",
                       default=False)
-    parser.add_option('--keep-archive',
+    group.add_option('--keep-archive',
                       help="Do not delete archive after upload",
                       action="store_true",
                       dest="keep_archive",
                       default=False)
-    parser.add_option('--version',
-                      help="Display version",
-                      action="store_true",
-                      dest="version",
-                      default=False)
+    parser.add_option_group(group)
 
 
 def _main():
@@ -318,9 +314,6 @@ def _main():
     if len(args) > 0:
         parser.error("Unknown arguments: %s" % args)
         sys.exit(1)
-
-    if options.satellite_group and not options.register:
-        parser.error("--satellite-group must be used with --register")
 
     if options.version:
         print constants.version
@@ -341,8 +334,9 @@ def _main():
     logger.debug("Version: " + constants.version)
     # Generate /etc/machine-id if it does not exist
     new = False
-    if options.regenerate:
+    if options.reregister:
         new = True
+        options.register = True
     logger.debug("Machine-ID: " + generate_machine_id(new))
 
     # Disable GPG verification
@@ -369,13 +363,11 @@ def _main():
     # Test connection, useful for proxy debug
     if options.test_connection:
         pconn = InsightsConnection(config)
-        pconn._test_connection()
+        pconn.test_connection()
 
     # Handle registration and grouping, this is mostly a no-op
     if options.register:
         opt_group = options.group
-        if options.satellite_group:
-            opt_group = get_satellite_group()
         hostname, opt_group = register(config, opt_group)
         logger.info('Successfully registered %s in group %s', hostname, opt_group)
 
@@ -386,10 +378,9 @@ def _main():
         logger.error("Exiting")
         sys.exit(1)
 
-    # If we are not just setting the schedule, do work son
-    if not options.schedule:
-        collect_data_and_upload(config, options)
-        handler.doRollover()
+    # do work
+    collect_data_and_upload(config, options)
+    handler.doRollover()
 
 if __name__ == '__main__':
     _main()

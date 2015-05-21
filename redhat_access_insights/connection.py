@@ -9,9 +9,9 @@ import json
 import traceback
 import logging
 from utilities import (determine_hostname,
-                      generate_machine_id,
-                      delete_unregistered_file,
-                      write_unregistered_file)
+                       generate_machine_id,
+                       delete_unregistered_file,
+                       write_unregistered_file)
 from cert_auth import rhsmCertificate
 from constants import InsightsConstants as constants
 
@@ -26,6 +26,7 @@ URLLIB3_LOGGER = logging.getLogger('urllib3.connectionpool')
 URLLIB3_LOGGER.setLevel(logging.WARNING)
 URLLIB3_LOGGER = logging.getLogger('requests.packages.urllib3.connectionpool')
 URLLIB3_LOGGER.setLevel(logging.WARNING)
+
 
 class InsightsConnection(object):
 
@@ -111,7 +112,6 @@ class InsightsConnection(object):
             proxies = {"https": env_proxy}
 
         conf_proxy = config.get(APP_NAME, 'proxy')
-        logger.debug("proxy string: %s", conf_proxy)
 
         if ((conf_proxy is not None and
              conf_proxy.lower() != 'None'.lower() and
@@ -202,7 +202,7 @@ class InsightsConnection(object):
         if last_ex:
             raise last_ex
 
-    def _test_connection(self):
+    def test_connection(self):
         """
         Test connection to Red Hat
         """
@@ -317,16 +317,42 @@ class InsightsConnection(object):
         """
         client_hostname = determine_hostname()
         machine_id = generate_machine_id(new_machine_id)
-        data = {'machine_id': machine_id, 'hostname': client_hostname}
+
+        try:
+            branch_info = self.branch_info()
+            remote_branch = branch_info['remote_branch']
+            remote_leaf = branch_info['remote_leaf']
+
+        except LookupError:
+            logger.error("ERROR: Could not determine branch information, exiting!")
+            logger.error("See %s for more information", constants.default_log_file)
+            logger.error("Could not register system, running configuration test")
+            self.test_connection()
+
+        except requests.ConnectionError:
+            logger.error("ERROR: Could not determine branch information, exiting!")
+            logger.error("See %s for more information", constants.default_log_file)
+            logger.error("Could not register system, running configuration test")
+            self.test_connection()
+
+        data = {'machine_id': machine_id,
+                'remote_branch': remote_branch,
+                'remote_leaf': remote_leaf,
+                'hostname': client_hostname}
         data = json.dumps(data)
         headers = {'Content-Type': 'application/json'}
         post_system_url = self.api_url + '/v1/systems'
         logger.debug("POST System: %s", post_system_url)
         logger.debug(data)
-        system = self.session.post(post_system_url,
-                                   headers=headers,
-                                   data=data)
-        logger.debug("POST System status: %d", system.status_code)
+        system = None
+        try:
+            system = self.session.post(post_system_url,
+                                       headers=headers,
+                                       data=data)
+            logger.debug("POST System status: %d", system.status_code)
+        except requests.ConnectionError:
+            logger.error("Could not register system, running configuration test")
+            self.test_connection()
         return system
 
     def do_group(self, group_id):
@@ -400,8 +426,9 @@ class InsightsConnection(object):
         file_name = os.path.basename(data_collected)
         files = {'file': (file_name, open(data_collected, 'rb'))}
 
-        logger.debug("Uploading %s", data_collected)
-        upload = self.session.post(self.upload_url, files=files)
+        upload_url = self.upload_url + '/' + generate_machine_id()
+        logger.debug("Uploading %s to %s", data_collected, upload_url)
+        upload = self.session.post(upload_url, files=files)
 
         self.handle_fail_rcs(upload)
         logger.debug("Upload status: %s %s %s",

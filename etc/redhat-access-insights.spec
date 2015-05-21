@@ -3,7 +3,7 @@
 
 Name:                   redhat-access-insights
 Summary:                Uploads Insights information to Red Hat on a periodic basis
-Version:                1.0.1
+Version:                1.0.3
 Release:                0%{?dist}
 Source0:                https://github.com/redhataccess/redhat-access-insights/archive/redhat-access-insights-%{version}.tar.gz
 Epoch:                  0
@@ -76,6 +76,12 @@ test "x$RPM_BUILD_ROOT" != "x" && rm -rf $RPM_BUILD_ROOT
 /usr/share/man/man8/*.8.gz
 
 %changelog
+* Wed May 20 2015 Dan Varga <dvarga@redhat.com> - 1.0.3-0
+- New default URLs
+
+* Mon May 18 2015 Dan Varga <dvarga@redhat.com> - 1.0.2-0
+- Update man pages
+
 * Thu May 07 2015 Dan Varga <dvarga@redhat.com> - 1.0.1-0
 - Add man pages
 - New certificate chain for cert-api.access.redhat.com
