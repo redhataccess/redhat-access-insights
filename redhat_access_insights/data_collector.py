@@ -294,7 +294,7 @@ class DataCollector(object):
             return
         logger.debug("Copying %s to %s with filters %s", path, full_path, str(patterns))
 
-        cmd = "/bin/sed -rf %s %s" % (constants.default_sed_file, path)
+        cmd = "/bin/sed -rf %s %s" % (constants.default_sed_file, path.replace("'", ""))
         sedcmd = Popen(shlex.split(cmd.encode('utf-8')),
                        stdout=PIPE)
 
