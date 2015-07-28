@@ -1,6 +1,7 @@
 MANIFEST
 .idea
 dist
+build/
 .ropeproject
 *pyc
 *.egg-info
