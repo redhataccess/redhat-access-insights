@@ -269,10 +269,6 @@
         },
         {
             "pattern": [],
-            "command": "/bin/hostname"
-        },
-        {
-            "pattern": [],
             "command": "/bin/netstat -neopa"
         },
         {
