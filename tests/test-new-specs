@@ -1,0 +1,61 @@
+#!/usr/bin/bash
+
+#
+# this script tests if the new specs work the same way as the old specs
+#   It takes an optional single argument, the command to run for insights-client
+#   if not specified it will default to redhat-access-insights
+#
+#   A reasonable alternative choice is "python ./redhat_access_insights/__init__.py"
+#   which will run the version in the source directories
+#
+
+set -ex
+    # -e fail the whole script if any command fails
+    # -x show each command before it runs
+
+cmd="$1"
+if [ -z "$cmd" ]; then
+    cmd=redhat-access-insights
+fi
+
+DIR1=$(mktemp -d)
+$cmd --offline --to-stdout | tar --directory $DIR1 --extract --gzip
+pushd $DIR1
+mv insights-* archive_dir_one
+popd
+
+DIR2=$(mktemp -d)
+$cmd --offline --collection-target "host" --to-stdout | tar --directory $DIR2 --extract --gzip 
+pushd $DIR2
+mv insights-* archive_dir_two
+popd
+
+DIR3=$(mktemp -d)
+$cmd --offline --collection-target "VERSION0" --to-stdout | tar --directory $DIR3 --extract --gzip 
+pushd $DIR3
+mv insights-* archive_dir_three
+popd
+
+echo COMPARE no options vs --collection-target \"host\"
+# the file contents will be different because they were collected at slightly different times
+# but the two should have exactly the same list of files
+if diff -r $DIR1/archive_dir_one $DIR2/archive_dir_two | grep "^Only in"; then false; fi
+
+echo COMPARE no options vs --collection-target \"VERSION0\"
+# the file contents will be different because they were collected at slightly different times
+# but the two should have exactly the same list of files
+#   except
+#      archive_dir_one: insights_data -v
+#      archive_dir_three/var/log: redhat-access-insights
+if diff -r $DIR1/archive_dir_one $DIR3/archive_dir_three | grep "^Only in" | grep -v "archive_dir_one: insights_data" | grep -v "archive_dir_three/var/log: redhat-access-insights" | grep "^Only in"; then false; fi
+
+echo COMPARE --collection-target "host" vs --collection-target \"VERSION0\"
+# the file contents will be different because they were collected at slightly different times
+# but the two should have exactly the same list of files
+#   except
+#      archive_dir_two: insights_data -v
+#      archive_dir_three/var/log: redhat-access-insights
+if diff -r $DIR2/archive_dir_two $DIR3/archive_dir_three | grep "^Only in" | grep -v "archive_dir_two: insights_data" | grep -v "archive_dir_three/var/log: redhat-access-insights" | grep "^Only in"; then false; fi
+
+
+rm -rf $DIR1 $DIR2 $DIR3

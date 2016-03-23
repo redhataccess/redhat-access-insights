@@ -77,6 +77,7 @@ test "x$RPM_BUILD_ROOT" != "x" && rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root)
 %{python_sitelib}/redhat_access_insights*.egg-info
 %{python_sitelib}/redhat_access_insights/*.py*
+%{python_sitelib}/redhat_access_insights/containers/*.py*
 
 %doc
 /usr/share/man/man8/*.8.gz

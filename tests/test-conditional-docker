@@ -1,0 +1,87 @@
+#!/usr/bin/bash
+
+# This tests if the conditional docker stuff in the client works correctly
+#   that is, does the client work correctly regardless of whether docker is installed or not
+#   where 'works correctly' is error when it should and analyse images or the host otherwise
+#
+#   It takes an optional single argument, the command to run for insights-client
+#   if not specified it will default to redhat-access-insights
+#
+#   A reasonable alternative choice is "python ./redhat_access_insights/__init__.py"
+#   which will run the version in the source directories
+#
+# basically we install docker, see if the client works correctly
+# then remove docker and see if works correctly
+#
+
+set -x
+    # -x show each command before it runs
+
+cmd="$1"
+if [ -z "$cmd" ]; then
+    cmd=redhat-access-insights
+fi
+
+FAILED=false
+
+if rpm -q docker; then
+  DOCKERHERE=true
+else
+  DOCKERHERE=false
+  echo Installing docker
+  yum install -y docker
+  systemctl start docker
+  systemctl enable docker
+fi
+
+if rpm -q python-docker-py; then
+  PYDOCKERHERE=true
+else
+  PYDOCKERHERE=false
+  echo Installing python-docker-py
+  yum install -y python-docker-py
+fi
+
+if ! $cmd --register --no-upload; then
+   echo "--register failed, when it should not have"
+   FAILED=true
+fi
+
+docker pull registry.access.redhat.com/rhel
+if ! $cmd --analyse-docker-image registry.access.redhat.com/rhel --no-upload; then
+   echo "--analyse-docker-image failed, when it should not have"
+   FAILED=true
+fi
+
+echo Removing docker and python-docker-py
+systemctl stop docker
+systemctl disable docker
+yum erase -y docker python-docker-py
+
+if ! $cmd --register --no-upload; then
+   echo "--register failed, when it should not have, test two"
+   FAILED=true
+fi
+
+if $cmd --analyse-docker-image registry.access.redhat.com/rhel --no-upload; then
+   echo "--analyse-docker-image succeded, when it should not have, test two"
+   FAILED=true
+fi
+
+
+if "$DOCKERHERE"; then
+  echo Installing docker
+  yum install -y docker
+  systemctl start docker
+  systemctl enable docker
+fi
+
+if "$PYDOCKERHERE"; then
+  echo Installing python-docker-py
+  yum install -y python-docker-py
+fi
+
+if "$FAILED"; then
+    exit 1
+fi
+

@@ -1,0 +1,30 @@
+#!/usr/bin/bash
+
+set -ex
+
+# Install the build requirements
+
+# this is needed for docker, atomic, and python-docker-py
+subscription-manager repos --enable=rhel-7-server-extras-rpms
+
+
+# the first set is needed to build the client always
+# install them one at a time because yum won't error on uninstallable rpms
+#   there is more than one on a line
+for each in make rpm-build python-setuptools python-devel python-requests python-magic; do
+    if ! rpm -q $each >/dev/null; then
+        yum install -y $each
+    fi
+done
+
+# these are needed to build the client for containers
+for each in atomic docker python-docker-py; do
+    if ! rpm -q $each >/dev/null; then
+        yum install -y $each
+    fi
+done
+
+systemctl enable docker
+systemctl start docker
+
+

@@ -23,7 +23,17 @@ $(RPM): $(SRPM)
 	rpmbuild --buildroot $(RPMTOP)/BUILDROOT --define="_topdir $(RPMTOP)" --rebuild $<
 
 install: $(RPM)
-	sudo yum install -y $(RPM)
+	if ! sudo yum install -y $(RPM); then \
+	  sudo yum reinstall -y $(RPM);      \
+	fi
+
+
+
+install-docker-image:
+	sudo docker build -t redhat-insights/insights-client .
+
+uninstall-docker-image:
+	sudo docker rmi redhat-insights/insights-client
 
 clean:
 	rm -rf dist

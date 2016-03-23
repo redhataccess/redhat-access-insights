@@ -21,14 +21,19 @@ class InsightsArchive(object):
     and files to the insights archive
     """
 
-    def __init__(self, compressor="gz"):
+    def __init__(self, compressor="gz", container_name=None):
         """
         Initialize the Insights Archive
         Create temp dir, archive dir, and command dir
         """
         self.tmp_dir = tempfile.mkdtemp(prefix='/var/tmp/')
+        if container_name:
+            # don't casually leave slashes in things that become file names
+            name = container_name.replace("/","-")
+        else:
+            name = determine_hostname()
         self.archive_name = ("insights-%s-%s" %
-                             (determine_hostname(),
+                             (name,
                               time.strftime("%Y%m%d%H%M%S")))
         self.archive_dir = self.create_archive_dir()
         self.cmd_dir = self.create_command_dir()
@@ -54,7 +59,7 @@ class InsightsArchive(object):
         """
         Returns the full archive path
         """
-        return os.path.join(self.archive_dir, path[1:])
+        return os.path.join(self.archive_dir, path.lstrip('/'))
 
     def _copy_file(self, path):
         """
@@ -92,7 +97,7 @@ class InsightsArchive(object):
         """
         for directory in path:
             if os.path.isdir(path):
-                full_path = os.path.join(self.archive_dir, directory[1:])
+                full_path = os.path.join(self.archive_dir, directory.lstrip('/'))
                 logger.debug("Copying %s to %s", directory, full_path)
                 shutil.copytree(directory, full_path)
             else:
@@ -137,12 +142,23 @@ class InsightsArchive(object):
         logger.debug("Deleting: " + self.archive_dir)
         shutil.rmtree(self.archive_dir, True)
 
-    def add_command_output(self, command):
+    def add_command_output(self, command, archive_file_name=None):
         """
         Add command output to file
         Use DataCollector.run_command_get_output to run the command
         """
-        logger.debug("Writing %s to cmd_dir", command['cmd'])
-        cmd_out = open(os.path.join(self.cmd_dir, command['cmd']), 'w')
+        if archive_file_name:
+            file_on_disk = os.path.join(self.archive_dir, archive_file_name.lstrip('/'))
+        else:
+            file_on_disk = os.path.join(self.cmd_dir, command['cmd'].lstrip('/'))
+
+        logger.debug("Writing %s to %s", command['cmd'], file_on_disk)
+        cmd_out = self._open_ensure_dirs(file_on_disk)
         cmd_out.write(command['output'].encode('utf8'))
         cmd_out.close()
+
+    def _open_ensure_dirs(self, file_on_disk):
+        dirname = os.path.dirname(file_on_disk)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname, 0o700)
+        return open(file_on_disk, 'w')
