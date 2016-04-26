@@ -8,11 +8,21 @@
 # same thing as 'there is no docker on this machine'.
 
 import logging
+import shlex
+import subprocess
 
 from redhat_access_insights.constants import InsightsConstants as constants
 
 APP_NAME = constants.app_name
 logger = logging.getLogger(APP_NAME)
+
+def run_command_very_quietly(cmdline):
+    # this takes a string (not an array)
+    # need to redirect stdout and stderr to /dev/null
+    cmd = shlex.split(cmdline)
+    proc = subprocess.Popen(cmd)
+    returncode = proc.wait()
+    return returncode
 
 
 # Check to see if we have access to docker through the "docker" python module
@@ -26,22 +36,30 @@ try:
 except Exception as e:
     HaveDockerException = e
 
+# Check to see if we have access to Atomic through the 'atomic' command
+HaveAtomic = False
+HaveAtomicException = None
+try:
+    if run_command_very_quietly("atomic --version") == 0:
+        # a returncode of 0 means cmd ran correctly
+        HaveAtomic = True
+    else:
+        # anything else indicates problem
+        HaveAtomic = False
+except Exception as e:
+    # this happens when atomic isn't installed or is otherwise unrunable
+    HaveAtomic = False
+    HaveAtomicException = e
+
+HaveAtomicMount = HaveAtomic
+
+
 if HaveDocker:
     import os
     import tempfile
     import shutil
-    import shlex
-    import subprocess
 
     from redhat_access_insights import InsightsClient
-
-    def run_command_very_quietly(cmdline):
-        # this takes a string (not an array)
-        # need to redirect stdout and stderr to /dev/null
-        cmd = shlex.split(cmdline)
-        proc = subprocess.Popen(cmd)
-        returncode = proc.wait()
-        return returncode
 
     def runcommand(cmd):
         # this takes an array (not a string)
@@ -49,6 +67,9 @@ if HaveDocker:
         proc = subprocess.Popen(cmd)
         returncode = proc.wait()
         return returncode
+
+    def get_container_name():
+        return "insights-client"
 
     def get_image_name():
         if InsightsClient.options.docker_image_name:
@@ -62,6 +83,12 @@ if HaveDocker:
         else:
             logger.debug("found docker_image_name in constants: %s" % constants.docker_image_name)
             return constants.docker_image_name
+
+    def use_atomic_run():
+        return HaveAtomic
+
+    def use_atomic_mount():
+        return HaveAtomicMount
 
     def pull_image(image):
         return runcommand(shlex.split("docker pull") + [ image ])
@@ -82,34 +109,6 @@ if HaveDocker:
         else:
             return False
 
-    def run_in_container(options):
-        # This script runs the insights-client in a docker container.
-        #
-        # This is using the docker client command, it should be changed to use the python docker
-        # client.
-        #
-        # It takes exactly the same arguments and options as insights-client, and just passes them
-        # on to the client running in the container.  But, this script currently only gives access
-        # to a few necessary parts of the host file system, so the container can not gather data
-        # from the host.  So the arguments should specify an option that does data gathering
-        # from a container or image, because gathering from the host won't work.
-        #
-        # The insights-client configuration from the host is used by the container.
-        #
-
-        # the -v's in the following mount the host's directories into the containers directories
-        #    /var/run/docker.sock ---- so we can use docker
-        #    /var/lib/docker      ---- so we can mount docker images and containers
-        #    /dev/                ----   also so we can mount docker images and containers
-        #    /etc/redhat-access-insights --- so we can use the host's configuration and machine-id
-        #    /etc/pki --- so we can use the host's Sat6 certs (if any)
-        if options.from_file:
-            logger.error('--from-file is incompatible with transfering to a container.')
-            return 1
-
-        docker_args = shlex.split("docker run --privileged=true -i -a stdin -a stdout -a stderr --rm -v /var/run/docker.sock:/var/run/docker.sock -v /var/lib/docker/:/var/lib/docker/ -v /dev/:/dev/ -v /etc/redhat-access-insights/:/etc/redhat-access-insights -v /etc/pki/:/etc/pki/ " + get_image_name() + " redhat-access-insights")
-
-        return runcommand(docker_args + [ "--run-here" ] + InsightsClient.argv[1:])
 
     def get_targets():
         client = docker.Client(base_url='unix://var/run/docker.sock')
@@ -122,40 +121,107 @@ if HaveDocker:
         return targets
 
 
-    # Check to see if we have access to Atomic through the 'atomic' command
-    HaveAtomic = False
-    HaveAtomicException = None
-    try:
-        if run_command_very_quietly("atomic --version") == 0:
-            # a returncode of 0 means cmd ran correctly
-            HaveAtomic = True
+
+    def run_in_container(options):
+
+        if options.from_file:
+            logger.error('--from-file is incompatible with transfering to a container.')
+            return 1
+
+        if use_atomic_run():
+            return runcommand(["atomic", "run", "--name", get_container_name(), get_image_name(), "redhat-access-insights", "--run-here" ] + InsightsClient.argv[1:])
+
         else:
-            # anything else indicates problem
-            HaveAtomic = False
-    except Exception as e:
-        # this happens when atomic isn't installed or is otherwise unrunable
-        HaveAtomic = False
-        HaveAtomicException = e
+            run_string = _get_run_string(get_image_name(), get_container_name())
+            if not run_string:
+                logger.debug("docker RUN label not found in image " + get_image_name() + " using fallback RUN string")
+                run_string = "docker run --privileged=true -i -a stdin -a stdout -a stderr --rm -v /var/run/docker.sock:/var/run/docker.sock -v /var/lib/docker/:/var/lib/docker/ -v /dev/:/dev/ -v /etc/redhat-access-insights/:/etc/redhat-access-insights -v /etc/pki/:/etc/pki/ " + get_image_name()
 
-    if HaveAtomic:
-        class AtomicTemporaryMountPoint:
-            # this is used for both images and containers
-            def __init__(self, image_id, mount_point):
-                self.image_id = image_id
-                self.mount_point = mount_point
+            docker_args = shlex.split(run_string + " redhat-access-insights")
 
-            def get_fs(self):
-                return self.mount_point
+            return runcommand(docker_args + [ "--run-here" ] + InsightsClient.argv[1:])
 
-            def close(self):
-                try:
-                    logger.debug("Closing Id %s On %s" % (self.image_id, self.mount_point))
-                    runcommand(shlex.split("atomic unmount") + [self.mount_point])
-                except Exception as e:
-                    logger.debug("exception while unmounting image or container: %s" % e)
-                shutil.rmtree(self.mount_point, ignore_errors=True)
+    def _get_run_string(imagename, containername):
+        labelstring = _get_label(imagename, "RUN")
+        if labelstring:
+            if containername:
+                labelstring = labelstring.replace(" --name NAME", " --name " + containername)
+            else:
+                labelstring = labelstring.replace(" --name NAME", " ")
 
-        def open_image(image_id):
+            labelstring = labelstring.replace("IMAGE", imagename)
+            return labelstring
+
+        return None
+
+    def _get_label(imagename, label):
+        imagedata = _inspect_image(imagename)
+        if imagedata:
+            idx = ("Config", "Labels", label)
+            if dictmultihas(imagedata, idx):
+                return dictmultiget(imagedata, idx)
+
+        return None
+
+    def _inspect_image(image_name):
+        client = docker.Client(base_url='unix://var/run/docker.sock')
+        try:
+            return client.inspect_image(image_name)
+        except Exception as e:
+            logger.debug("Not able to inspect image %s: %s" % (image_name, e))
+
+        return None
+
+
+    class AtomicTemporaryMountPoint:
+        # this is used for both images and containers
+        def __init__(self, image_id, mount_point):
+            self.image_id = image_id
+            self.mount_point = mount_point
+
+        def get_fs(self):
+            return self.mount_point
+
+        def close(self):
+            try:
+                logger.debug("Closing Id %s On %s" % (self.image_id, self.mount_point))
+                runcommand(shlex.split("atomic unmount") + [self.mount_point])
+            except Exception as e:
+                logger.debug("exception while unmounting image or container: %s" % e)
+            shutil.rmtree(self.mount_point, ignore_errors=True)
+
+    from mount import DockerMount, Mount, MountError
+
+    class DockerTemporaryMountPoint:
+        # this is used for both images and containers
+        def __init__(self, client, image_id, mount_point, cid):
+            self.client = client
+            self.image_id = image_id
+            self.mount_point = mount_point
+            self.cid = cid
+
+        def get_fs(self):
+            return self.mount_point
+
+        def close(self):
+            try:
+                logger.debug("Closing Id %s On %s" % (self.image_id, self.mount_point))
+                # If using device mapper, unmount the bind-mount over the directory
+                if self.client.info()['Driver'] == 'devicemapper':
+                    Mount.unmount_path(self.mount_point)
+
+                DockerMount(self.mount_point).unmount(self.cid)
+            except Exception as e:
+                logger.debug("exception while unmounting image or container: %s" % e)
+            shutil.rmtree(self.mount_point, ignore_errors=True)
+
+    def open_image(image_id):
+        global HaveAtomicException
+        if HaveAtomicException:
+            logger.debug("atomic is either not installed or not accessable %s" % HaveAtomicException);
+            HaveAtomicException = None
+
+        if use_atomic_mount():
             mount_point = tempfile.mkdtemp()
             logger.debug("Opening Image Id %s On %s using atomic" % (image_id, mount_point))
             if runcommand(shlex.split("atomic mount") + [image_id, mount_point]) == 0:
@@ -165,49 +231,17 @@ if HaveDocker:
                 shutil.rmtree(mount_point, ignore_errors=True)
                 return None
 
-        def open_container(container_id):
-            mount_point = tempfile.mkdtemp()
-            logger.debug("Opening Container Id %s On %s using atomic" % (container_id, mount_point))
-            if runcommand(shlex.split("atomic mount") + [container_id, mount_point]) == 0:
-                return AtomicTemporaryMountPoint(container_id, mount_point)
-            else:
-                logger.error('Could not mount Container Id %s On %s' % (container_id, mount_point))
-                shutil.rmtree(mount_point, ignore_errors=True)
-                return None
-
-    else:
-        from mount import DockerMount, Mount, MountError
-
-        class DockerTemporaryMountPoint:
-            # this is used for both images and containers
-            def __init__(self, client, image_id, mount_point, cid):
-                self.client = client
-                self.image_id = image_id
-                self.mount_point = mount_point
-                self.cid = cid
-
-            def get_fs(self):
-                return self.mount_point
-
-            def close(self):
-                try:
-                    logger.debug("Closing Id %s On %s" % (self.image_id, self.mount_point))
-                    unmount_obj(self.client, self.mount_point, self.cid)
-                except Exception as e:
-                    logger.debug("exception while unmounting image or container: %s" % e)
-                shutil.rmtree(self.mount_point, ignore_errors=True)
-
-        def open_image(image_id):
-            global HaveAtomicException
-            if HaveAtomicException:
-                logger.debug("using docker client to open images and containers")
-                logger.debug("atomic is either not installed or not accessable %s" % HaveAtomicException);
-                HaveAtomicException = None
+        else:
             client = docker.Client(base_url='unix://var/run/docker.sock')
             if client:
                 mount_point = tempfile.mkdtemp()
                 logger.debug("Opening Image Id %s On %s using docker client" % (image_id, mount_point))
-                cid = mount_obj(client, mount_point, image_id)
+                # docker mount creates a temp image
+                # we have to use this temp image id to remove the device
+                mount_point, cid = DockerMount(mount_point).mount(image_id)
+                if client.info()['Driver'] == 'devicemapper':
+                    DockerMount.mount_path(os.path.join(mount_point, "rootfs"), mount_point, bind=True)
+
                 if cid:
                     return DockerTemporaryMountPoint(client, image_id, mount_point, cid)
                 else:
@@ -219,61 +253,42 @@ if HaveDocker:
                 logger.error('Could not connect to docker to examine image %s' % image_id)
                 return None
 
-        def open_container(container_id):
-            global HaveAtomicException
-            if HaveAtomicException:
-                logger.debug("using docker client to open images and containers")
-                logger.debug("atomic is either not installed or not accessable %s" % HaveAtomicException);
-                HaveAtomicException = None
+    def open_container(container_id):
+        global HaveAtomicException
+        if HaveAtomicException:
+            logger.debug("atomic is either not installed or not accessable %s" % HaveAtomicException);
+            HaveAtomicException = None
+
+        if use_atomic_mount():
+            mount_point = tempfile.mkdtemp()
+            logger.debug("Opening Container Id %s On %s using atomic" % (container_id, mount_point))
+            if runcommand(shlex.split("atomic mount") + [container_id, mount_point]) == 0:
+                return AtomicTemporaryMountPoint(container_id, mount_point)
+            else:
+                logger.error('Could not mount Container Id %s On %s' % (container_id, mount_point))
+                shutil.rmtree(mount_point, ignore_errors=True)
+                return None
+
+        else:
             client = docker.Client(base_url='unix://var/run/docker.sock')
             if client:
-                matching_containers = []
-                for each in client.containers(all=True, trunc=False):
-                    if container_id == each['Id']:
-                        matching_containers = [ each ]
-                        break
-                if len(matching_containers) == 1:
-                    mount_point = tempfile.mkdtemp()
-                    logger.debug("Opening Container Id %s On %s using docker client" % (container_id, mount_point))
-                    cid = mount_obj(client, mount_point, container_id)
-                    if cid:
-                        return DockerTemporaryMountPoint(client, container_id, mount_point, cid)
-                    else:
-                        logger.error('Could not mount Container Id %s On %s' % (container_id, mount_point))
-                        shutil.rmtree(mount_point, ignore_errors=True)
-                        return None
-
+                mount_point = tempfile.mkdtemp()
+                logger.debug("Opening Container Id %s On %s using docker client" % (container_id, mount_point))
+                # docker mount creates a temp image
+                # we have to use this temp image id to remove the device
+                mount_point, cid = DockerMount(mount_point).mount(container_id)
+                if client.info()['Driver'] == 'devicemapper':
+                    DockerMount.mount_path(os.path.join(mount_point, "rootfs"), mount_point, bind=True)
+                if cid:
+                    return DockerTemporaryMountPoint(client, container_id, mount_point, cid)
                 else:
-                    if len(matching_containers) > 1:
-                        logger.error('%s containers match name %s' % (len(matching_containers), container_id))
-                        for each in matching_containers:
-                            logger.error('   %s %s' % (get_label(each), each['Id']))
-                    else:
-                        logger.error('no containers match name %s' % container_id)
+                    logger.error('Could not mount Container Id %s On %s' % (container_id, mount_point))
+                    shutil.rmtree(mount_point, ignore_errors=True)
                     return None
+
             else:
                 logger.error('Could not connect to docker to examine container %s' % container_id)
                 return None
-
-        def mount_obj(client, path, obj):
-            """ mounts the obj to the given path """
-
-            # docker mount creates a temp image
-            # we have to use this temp image id to remove the device
-            path, new_cid = DockerMount(path).mount(obj)
-            if client.info()['Driver'] == 'devicemapper':
-                DockerMount.mount_path(os.path.join(path, "rootfs"), path, bind=True)
-
-            return new_cid
-
-        def unmount_obj(client, path, cid):
-            """ unmount the given path """
-
-            # If using device mapper, unmount the bind-mount over the directory
-            if client.info()['Driver'] == 'devicemapper':
-                Mount.unmount_path(path)
-
-            DockerMount(path).unmount(cid)
 
 else:
     # If we can't import docker then we stub out all the main functions to report errors
@@ -310,3 +325,39 @@ else:
                      (HaveDockerException if HaveDockerException else ''))
         return None
 
+
+
+
+#
+# JSON data has lots of nested dictionaries, that are often optional.
+#
+# so for example you want to write:
+#
+#    foo = d['meta_specs']['uploader_log']['something_else']
+#
+# but d might not have 'meta_specs' and that might not have 'uploader_log' and ...
+# so write this instead
+#
+#   idx = ('meta_specs','uploader_log','something_else')
+#   if dictmultihas(d, idx):
+#      foo = dictmultiget(d, idx)
+#   else:
+#      ....
+#
+
+def dictmultihas(d, idx):
+    # 'idx' is a tuple of strings, indexing into 'd'
+    #  if d doesn't have these indexes, return False
+    for each in idx[:-1]:
+        if d and each in d:
+            d = d[each]
+    if d and len(idx) > 0 and idx[-1] in d:
+        return True
+    else:
+        return False
+
+def dictmultiget(d, idx):
+    # 'idx' is a tuple of strings, indexing into 'd'
+    for each in idx[:-1]:
+        d = d[each]
+    return d[idx[-1]]
