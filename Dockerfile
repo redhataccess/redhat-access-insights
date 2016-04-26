@@ -33,3 +33,4 @@ COPY LICENSE MANIFEST.in setup.cfg setup.py /src/insights-client/
 #   but delete the config directory's content because we must mount that from the host
 RUN cd /src/insights-client; python setup.py install; rm -rf /etc/redhat-access-insights/*
 
+LABEL RUN="docker run --name NAME --privileged=true -i -a stdin -a stdout -a stderr --rm -v /var/run/docker.sock:/var/run/docker.sock -v /var/lib/docker/:/var/lib/docker/ -v /dev/:/dev/ -v /etc/redhat-access-insights/:/etc/redhat-access-insights -v /etc/pki/:/etc/pki/ IMAGE"
