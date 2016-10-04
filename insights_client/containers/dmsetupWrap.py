@@ -2,9 +2,9 @@
 # Copyright (C) 2016 Red Hat, All rights reserved.
 # AUTHORS: Alex Collins <alcollin@redhat.com>
 
-import util
 import sys
 import string
+from subp import subp
 
 """ Module for extracting output of dmsetup. """
 
@@ -24,7 +24,7 @@ def getMajorMinor(deviceName, dmsetupLs):
 
 def getDmsetupLs():
     cmd = ['dmsetup', 'ls']
-    r = util.subp(cmd)
+    r = subp(cmd)
     if r.return_code != 0:
         print r.stderr
         return -1

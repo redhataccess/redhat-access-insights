@@ -115,8 +115,8 @@ def handle_startup():
         sys.exit()
 
     if (InsightsClient.options.container_mode and
-       not InsightsClient.options.run_here and
-       insights_client_container_is_available()):
+            not InsightsClient.options.run_here and
+            insights_client_container_is_available()):
         sys.exit(run_in_container())
 
     if InsightsClient.options.validate:
@@ -217,7 +217,8 @@ def handle_startup():
         pconn.unregister()
         sys.exit()
 
-    # force-reregister -- remove machine-id files and registration files before trying to register again
+    # force-reregister -- remove machine-id files and registration files
+    # before trying to register again
     new = False
     if InsightsClient.options.reregister:
         new = True
@@ -460,7 +461,7 @@ def collect_data_and_upload(rc=0):
              'sig' not in stdin_config)):
             raise ValueError
         if ((InsightsClient.options.from_file or InsightsClient.options.from_stdin) and
-           'branch_info' in stdin_config and stdin_config['branch_info'] is not None):
+                'branch_info' in stdin_config and stdin_config['branch_info'] is not None):
             branch_info = stdin_config['branch_info']
     except:
         logger.error('ERROR: Invalid config for %s! Exiting...',
@@ -488,7 +489,8 @@ def collect_data_and_upload(rc=0):
                 container_connection = open_image(t['name'])
                 logging_name = 'Docker image ' + t['name']
                 archive_meta['docker_id'] = t['name']
-                archive_meta['display_name'] = docker_display_name(t['name'], t['type'].replace('docker_', ''))
+                archive_meta['display_name'] = docker_display_name(
+                    t['name'], t['type'].replace('docker_', ''))
                 logger.debug('Docker display_name: %s', archive_meta['display_name'])
                 logger.debug('Docker docker_id: %s', archive_meta['docker_id'])
                 if container_connection:
@@ -500,7 +502,8 @@ def collect_data_and_upload(rc=0):
                 container_connection = open_container(t['name'])
                 logging_name = 'Docker container ' + t['name']
                 archive_meta['docker_id'] = t['name']
-                archive_meta['display_name'] = docker_display_name(t['name'], t['type'].replace('docker_', ''))
+                archive_meta['display_name'] = docker_display_name(
+                    t['name'], t['type'].replace('docker_', ''))
                 logger.debug('Docker display_name: %s', archive_meta['display_name'])
                 logger.debug('Docker docker_id: %s', archive_meta['docker_id'])
                 if container_connection:
@@ -510,7 +513,8 @@ def collect_data_and_upload(rc=0):
                     continue
             elif t['type'] == 'host':
                 logging_name = determine_hostname()
-                archive_meta['display_name'] = determine_hostname(InsightsClient.options.display_name)
+                archive_meta['display_name'] = determine_hostname(
+                    InsightsClient.options.display_name)
             else:
                 logger.error('Unexpected analysis target: %s', t['type'])
                 continue

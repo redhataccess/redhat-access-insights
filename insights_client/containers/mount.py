@@ -7,12 +7,12 @@
 import os
 import sys
 import json
-import docker
+from docker_wrap import docker, DockerError
+from subp import subp
 from fnmatch import fnmatch as matches
 
 import util
 import dmsetupWrap
-from docker.utils import kwargs_from_env
 
 
 """ Module for mounting and unmounting containerized applications. """
@@ -69,7 +69,7 @@ class Mount:
         """
         table = '0 %d thin /dev/mapper/%s %s' % (int(size) // 512, pool, dm_id)
         cmd = ['dmsetup', 'create', name, '--table', table]
-        r = util.subp(cmd)
+        r = subp(cmd)
         if r.return_code != 0:
             raise MountError('Failed to create thin device: %s' %
                              r.stderr.decode(sys.getdefaultencoding()))
@@ -80,7 +80,7 @@ class Mount:
         Destroys a thin device via subprocess call.
         """
         cmd = ['dmsetup', 'remove', '--retry', name]
-        r = util.subp(cmd)
+        r = subp(cmd)
         if not force:
             if r.return_code != 0:
                 raise MountError('Could not remove thin device:\n%s' %
@@ -92,7 +92,7 @@ class Mount:
         Checks dmsetup to see if a device is already active
         """
         cmd = ['dmsetup', 'info', device]
-        dmsetup_info = util.subp(cmd)
+        dmsetup_info = subp(cmd)
         for dm_line in dmsetup_info.stdout.split("\n"):
             line = dm_line.split(':')
             if ('State' in line[0].strip()) and ('ACTIVE' in line[1].strip()):
@@ -105,7 +105,7 @@ class Mount:
         Returns the file system type (xfs, ext4) of a given device
         """
         cmd = ['lsblk', '-o', 'FSTYPE', '-n', thin_pathname]
-        fs_return = util.subp(cmd)
+        fs_return = subp(cmd)
         return fs_return.stdout.strip()
 
     @staticmethod
@@ -118,7 +118,7 @@ class Mount:
             cmd.append('--bind')
         cmd.append(source)
         cmd.append(target)
-        r = util.subp(cmd)
+        r = subp(cmd)
         if r.return_code != 0:
             raise MountError('Could not mount docker container:\n' +
                              ' '.join(cmd) + '\n%s' %
@@ -130,7 +130,7 @@ class Mount:
         Retrieves the device mounted at mntpoint, or raises
         MountError if none.
         """
-        results = util.subp(['findmnt', '-o', 'SOURCE', mntpoint])
+        results = subp(['findmnt', '-o', 'SOURCE', mntpoint])
         if results.return_code != 0:
             raise MountError('No device mounted at %s' % mntpoint)
 
@@ -142,7 +142,7 @@ class Mount:
         """
         Unmounts the directory specified by path.
         """
-        r = util.subp(['umount', path])
+        r = subp(['umount', path])
         if not force:
             if r.return_code != 0:
                 raise ValueError(r.stderr)
@@ -160,7 +160,7 @@ class DockerMount(Mount):
 
     def __init__(self, mountpoint, mnt_mkdir=False):
         Mount.__init__(self, mountpoint)
-        self.client = docker.Client(**kwargs_from_env())
+        self.client = docker()
         self.mnt_mkdir = mnt_mkdir
         self.tmp_image = None
 
@@ -175,8 +175,8 @@ class DockerMount(Mount):
             return self.client.create_container(
                 image=iid, command='/bin/true',
                 environment=['_ATOMIC_TEMP_CONTAINER'],
-                detach=True, network_disabled=True)['Id']
-        except docker.errors.APIError as ex:
+                detach=True, network_disabled=True)
+        except DockerError as ex:
             raise MountError('Error creating temporary container:\n%s' % str(ex))
 
     def _clone(self, cid):
@@ -187,21 +187,14 @@ class DockerMount(Mount):
         so that they can be cleaned on unmount.
         """
         try:
-            iid = self.client.commit(
-                container=cid,
-                conf={
-                    'Labels': {
-                        'io.projectatomic.Temporary': 'true'
-                    }
-                }
-            )['Id']
-        except docker.errors.APIError as ex:
+            iid = self.client.commit(cid)
+        except DockerError as ex:
             raise MountError(str(ex))
         self.tmp_image = iid
         return self._create_temp_container(iid)
 
     def _is_container_running(self, cid):
-        cinfo = self.client.inspect_container(cid)
+        cinfo = self.client.inspect(cid)
         return cinfo['State']['Running']
 
     def _identifier_as_cid(self, identifier):
@@ -268,7 +261,7 @@ class DockerMount(Mount):
         the host filesystem.
         """
 
-        driver = self.client.info()['Driver']
+        driver = self.client.driver()
         driver_mount_fn = getattr(self, "_mount_" + driver,
                                   self._unsupported_backend)
         cid = driver_mount_fn(identifier)
@@ -279,22 +272,20 @@ class DockerMount(Mount):
     def _unsupported_backend(self, identifier=''):
         raise MountError('Insights cannot be used with the {} docker '
                          'storage backend.'
-                         ''.format(self.client.info()['Driver']))
+                         ''.format(self.client.driver()))
 
     def _mount_devicemapper(self, identifier):
         """
         Devicemapper mount backend.
         """
 
-        info = self.client.info()
-
         # cid is the contaienr_id of the temp container
         cid = self._identifier_as_cid(identifier)
 
-        cinfo = self.client.inspect_container(cid)
+        cinfo = self.client.inspect(cid)
 
         dm_dev_name, dm_dev_id, dm_dev_size = '', '', ''
-        dm_pool = info['DriverStatus'][0][1]
+        dm_pool = self.client.dm_pool()
 
         try:
             dm_dev_name = cinfo['GraphDriver']['Data']['DeviceName']
@@ -302,13 +293,14 @@ class DockerMount(Mount):
             dm_dev_size = cinfo['GraphDriver']['Data']['DeviceSize']
         except:
             # TODO: deprecated when GraphDriver patch makes it upstream
+            # leaving this here to support older docker versions
             dm_dev_id, dm_dev_size = DockerMount._no_gd_api_dm(cid)
             dm_dev_name = dm_pool.replace('pool', cid)
 
         # grab list of devces
         dmsetupLs = dmsetupWrap.getDmsetupLs()
         if dmsetupLs == -1:
-                raise MountError('Error: dmsetup returned non zero error ')
+            raise MountError('Error: dmsetup returned non zero error ')
 
         # ENSURE device exists!
         if dm_dev_name not in dmsetupLs:
@@ -362,7 +354,7 @@ class DockerMount(Mount):
         """
 
         cid = self._identifier_as_cid(identifier)
-        cinfo = self.client.inspect_container(cid)
+        cinfo = self.client.inspect(cid)
 
         ld, ud, wd = '', '', ''
         try:
@@ -376,7 +368,7 @@ class DockerMount(Mount):
         optstring = ','.join(options)
         cmd = ['mount', '-t', 'overlay', '-o', optstring, 'overlay',
                self.mountpoint]
-        status = util.subp(cmd)
+        status = subp(cmd)
         if status.return_code != 0:
             self._cleanup_container(cinfo)
             raise MountError('Failed to mount OverlayFS device.\n%s' %
@@ -396,7 +388,7 @@ class DockerMount(Mount):
         iid = cinfo['Image']
         self.client.remove_container(cinfo['Id'])
         try:
-            labels = self.client.inspect_image(iid)['Config']['Labels']
+            labels = self.client.inspect(iid)['Config']['Labels']
         except TypeError:
             labels = {}
         if labels and 'io.projectatomic.Temporary' in labels:
@@ -413,7 +405,7 @@ class DockerMount(Mount):
         """
         Unmounts and cleans-up after a previous mount().
         """
-        driver = self.client.info()['Driver']
+        driver = self.client.driver()
         driver_unmount_fn = getattr(self, "_unmount_" + driver,
                                     self._unsupported_backend)
         driver_unmount_fn(cid)
@@ -425,7 +417,7 @@ class DockerMount(Mount):
         mountpoint = self.mountpoint
         Mount.unmount_path(mountpoint)
 
-        cinfo = self.client.inspect_container(cid)
+        cinfo = self.client.inspect(cid)
         dev_name = cinfo['GraphDriver']['Data']['DeviceName']
 
         Mount.remove_thin_device(dev_name)
@@ -437,7 +429,7 @@ class DockerMount(Mount):
         """
         mountpoint = self.mountpoint
         Mount.unmount_path(mountpoint)
-        self._cleanup_container(self.client.inspect_container(cid))
+        self._cleanup_container(self.client.inspect(cid))
 
     def _clean_temp_container_by_path(self, path):
         short_cid = os.path.basename(path)

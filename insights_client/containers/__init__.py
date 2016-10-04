@@ -11,7 +11,6 @@ import os
 import logging
 import shlex
 import subprocess
-
 from insights_client.constants import InsightsConstants as constants
 
 APP_NAME = constants.app_name
@@ -82,11 +81,13 @@ if HaveDocker:
 
     def get_image_name():
         if InsightsClient.options.docker_image_name:
-            logger.debug("found docker_image_name in options: %s" % InsightsClient.options.docker_image_name)
+            logger.debug("found docker_image_name in options: %s" %
+                         InsightsClient.options.docker_image_name)
             return InsightsClient.options.docker_image_name
 
         elif InsightsClient.config.get(APP_NAME, 'docker_image_name'):
-            logger.debug("found docker_image_name in config: %s" % InsightsClient.config.get(APP_NAME, 'docker_image_name'))
+            logger.debug("found docker_image_name in config: %s" %
+                         InsightsClient.config.get(APP_NAME, 'docker_image_name'))
             return InsightsClient.config.get(APP_NAME, 'docker_image_name')
 
         else:
@@ -152,7 +153,7 @@ if HaveDocker:
             c_id = elements[0]
             i_id = elements[1]
             link_dict[c_id] = [{'system_id': generate_analysis_target_id('docker_image', i_id),
-                               'type': 'image'}]
+                                'type': 'image'}]
             if i_id not in link_dict:
                 link_dict[i_id] = []
             link_dict[i_id].append({'system_id': generate_analysis_target_id('docker_container', c_id),
@@ -170,7 +171,8 @@ if HaveDocker:
         else:
             run_string = _get_run_string(get_image_name(), get_container_name())
             if not run_string:
-                logger.debug("docker RUN label not found in image " + get_image_name() + " using fallback RUN string")
+                logger.debug("docker RUN label not found in image " +
+                             get_image_name() + " using fallback RUN string")
                 run_string = "docker run --privileged=true -i -a stdin -a stdout -a stderr --rm -v /var/run/docker.sock:/var/run/docker.sock -v /var/lib/docker/:/var/lib/docker/ -v /dev/:/dev/ -v /etc/redhat-access-insights/:/etc/redhat-access-insights -v /etc/pki/:/etc/pki/ " + get_image_name()
 
             docker_args = shlex.split(run_string + " redhat-access-insights")
@@ -207,6 +209,7 @@ if HaveDocker:
 
     class AtomicTemporaryMountPoint:
         # this is used for both images and containers
+
         def __init__(self, image_id, mount_point):
             self.image_id = image_id
             self.mount_point = mount_point
@@ -226,6 +229,7 @@ if HaveDocker:
 
     class DockerTemporaryMountPoint:
         # this is used for both images and containers
+
         def __init__(self, driver, image_id, mount_point, cid):
             self.driver = driver
             self.image_id = image_id
@@ -250,7 +254,8 @@ if HaveDocker:
     def open_image(image_id):
         global HaveAtomicException
         if HaveAtomicException:
-            logger.debug("atomic is either not installed or not accessable %s" % HaveAtomicException)
+            logger.debug("atomic is either not installed or not accessable %s" %
+                         HaveAtomicException)
             HaveAtomicException = None
 
         if use_atomic_mount():
@@ -285,12 +290,14 @@ if HaveDocker:
     def open_container(container_id):
         global HaveAtomicException
         if HaveAtomicException:
-            logger.debug("atomic is either not installed or not accessable %s" % HaveAtomicException)
+            logger.debug("atomic is either not installed or not accessable %s" %
+                         HaveAtomicException)
             HaveAtomicException = None
 
         if use_atomic_mount():
             mount_point = tempfile.mkdtemp()
-            logger.debug("Opening Container Id %s On %s using atomic" % (container_id, mount_point))
+            logger.debug("Opening Container Id %s On %s using atomic" %
+                         (container_id, mount_point))
             if runcommand(shlex.split("atomic mount") + [container_id, mount_point]) == 0:
                 return AtomicTemporaryMountPoint(container_id, mount_point)
             else:
@@ -304,7 +311,8 @@ if HaveDocker:
                 return None
 
             mount_point = tempfile.mkdtemp()
-            logger.debug("Opening Container Id %s On %s using docker client" % (container_id, mount_point))
+            logger.debug("Opening Container Id %s On %s using docker client" %
+                         (container_id, mount_point))
             # docker mount creates a temp image
             # we have to use this temp image id to remove the device
             mount_point, cid = DockerMount(mount_point).mount(container_id)
@@ -318,7 +326,8 @@ if HaveDocker:
                 return None
 
     def _docker_inspect_image(docker_name, docker_type):
-        a = json.loads(run_command_capture_output("docker inspect --type %s %s" % (docker_type, docker_name)))
+        a = json.loads(run_command_capture_output(
+            "docker inspect --type %s %s" % (docker_type, docker_name)))
         if len(a) == 0:
             return None
         else:
