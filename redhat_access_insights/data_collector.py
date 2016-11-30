@@ -32,9 +32,10 @@ class DataCollector(object):
     Run commands and collect files
     """
 
-    def __init__(self, archive_=None):
+    def __init__(self, archive_=None, config=None):
         self._set_black_list()
         self.archive = archive_ if archive_ else archive.InsightsArchive()
+        self.config = config
 
     def _set_black_list(self):
         """
@@ -61,6 +62,12 @@ class DataCollector(object):
         Execute a command through the system shell. First checks to see if the
         requested command is executable. Returns (returncode, stdout, 0)
         """
+        # add a default command timeout
+        # get this from the configuration file if it exists
+        if self.config and self.config.has_option(APP_NAME, 'cmd_timeout'):
+            cmd_timeout = self.config.getint(APP_NAME, 'cmd_timeout')
+        else:
+            cmd_timeout = constants.default_cmd_timeout
         # ensure consistent locale for collected command output
         cmd_env = {'LC_ALL': 'C'}
         if not six.PY3:
@@ -91,6 +98,11 @@ class DataCollector(object):
         proc0.stdout.close()
         proc0 = sedcmd
 
+        from threading import Timer
+
+        def kill_proc(p):
+            p.kill()
+
         if exclude is not None:
             exclude_file = NamedTemporaryFile()
             exclude_file.write("\n".join(exclude))
@@ -101,7 +113,17 @@ class DataCollector(object):
                           stdout=PIPE)
             proc0.stdout.close()
             if filters is None or len(filters) == 0:
-                stdout, stderr = proc1.communicate()
+                timer1 = Timer(cmd_timeout, kill_proc, [proc1])
+                try:
+                    timer1.start()
+                    stdout, stderr = proc1.communicate()
+                finally:
+                    if not timer1.is_alive():
+                        logger.debug('Command %s took too long to run. Exiting.', command)
+                        return {'cmd': self._mangle_command(command),
+                                'status': 130,
+                                'output': 'Command took to long to run. Exiting.'}
+                    timer1.cancel()
             proc0 = proc1
             dirty = True
 
@@ -114,11 +136,31 @@ class DataCollector(object):
                           stdin=proc0.stdout,
                           stdout=PIPE)
             proc0.stdout.close()
-            stdout, stderr = proc2.communicate()
+            timer2 = Timer(cmd_timeout, kill_proc, [proc2])
+            try:
+                timer2.start()
+                stdout, stderr = proc2.communicate()
+            finally:
+                if not timer2.is_alive():
+                    logger.debug('Command %s took too long to run. Exiting.', command)
+                    return {'cmd': self._mangle_command(command),
+                            'status': 130,
+                            'output': 'Command took to long to run. Exiting.'}
+                timer2.cancel()
             dirty = True
 
         if not dirty:
-            stdout, stderr = proc0.communicate()
+            timer0 = Timer(cmd_timeout, kill_proc, [proc0])
+            try:
+                timer0.start()
+                stdout, stderr = proc0.communicate()
+            finally:
+                if not timer0.is_alive():
+                    logger.debug('Command %s took too long to run. Exiting.', command)
+                    return {'cmd': self._mangle_command(command),
+                            'status': 130,
+                            'output': 'Command took to long to run. Exiting.'}
+                timer0.cancel()
 
         # Required hack while we still pass shell=True to Popen; a Popen
         # call with shell=False for a non-existant binary will raise OSError.

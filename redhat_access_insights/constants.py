@@ -28,3 +28,4 @@ class InsightsConstants(object):
     lastupload_file = default_conf_dir + '.lastupload'
     pub_gpg_path = default_conf_dir + 'redhattools.pub.gpg'
     machine_id_file = default_conf_dir + 'machine-id'
+    default_cmd_timeout = 600  # default command execution to ten minutes, prevents long running commands that will hang

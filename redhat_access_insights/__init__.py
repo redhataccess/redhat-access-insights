@@ -205,7 +205,7 @@ def collect_data_and_upload(config, options, rc=0):
         return rc
 
     archive = InsightsArchive(compressor=options.compressor)
-    dc = DataCollector(archive)
+    dc = DataCollector(archive, config)
 
     # register the exit handler here to delete the archive
     atexit.register(handle_exit, archive, options.keep_archive or options.no_upload)
