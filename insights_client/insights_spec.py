@@ -9,7 +9,7 @@ from tempfile import NamedTemporaryFile
 from utilities import determine_hostname
 from constants import InsightsConstants as constants
 
-logger = logging.getLogger(constants.app_name)
+logger = logging.getLogger(__name__)
 
 
 class InsightsSpec(object):

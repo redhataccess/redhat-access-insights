@@ -3,9 +3,8 @@ Module to interact with Satellite Based Certificates
 """
 import os
 import logging
-from constants import InsightsConstants as constants
 
-logger = logging.getLogger(constants.app_name)
+logger = logging.getLogger(__name__)
 
 # RHSM and Subscription Manager
 RHSM_CONFIG = None
