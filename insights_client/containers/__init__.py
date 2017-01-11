@@ -14,7 +14,7 @@ import subprocess
 from insights_client.constants import InsightsConstants as constants
 
 APP_NAME = constants.app_name
-logger = logging.getLogger(APP_NAME)
+logger = logging.getLogger(__name__)
 
 
 def run_command_very_quietly(cmdline):

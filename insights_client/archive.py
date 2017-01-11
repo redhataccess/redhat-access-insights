@@ -9,10 +9,9 @@ import subprocess
 import shlex
 import logging
 from utilities import determine_hostname, _expand_paths, write_data_to_file
-from constants import InsightsConstants as constants
 from insights_spec import InsightsFile, InsightsCommand
 
-logger = logging.getLogger(constants.app_name)
+logger = logging.getLogger(__name__)
 
 
 class InsightsArchive(object):

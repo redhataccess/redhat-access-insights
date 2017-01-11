@@ -11,7 +11,7 @@ import shlex
 from subprocess import Popen, PIPE, STDOUT
 from constants import InsightsConstants as constants
 
-logger = logging.getLogger(constants.app_name)
+logger = logging.getLogger(__name__)
 
 
 def determine_hostname(display_name=None):

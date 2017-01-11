@@ -44,10 +44,9 @@ from containers import (open_image,
 from client_config import InsightsClient, set_up_options, parse_config_file
 
 __author__ = 'Jeremy Crafts <jcrafts@redhat.com>, Dan Varga <dvarga@redhat.com>'
-
 LOG_FORMAT = ("%(asctime)s %(levelname)s %(message)s")
 APP_NAME = constants.app_name
-logger = logging.getLogger(APP_NAME)
+logger = logging.getLogger(__name__)
 
 
 def set_up_logging():
