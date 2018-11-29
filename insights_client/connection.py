@@ -234,7 +234,7 @@ class InsightsConnection(object):
 
         # handle endpoint validation
         if self.proxies:
-            connect_str = 'CONNECT {0} HTTP/1.0\r\n'.format(hostname[0])
+            connect_str = 'CONNECT {0}:443 HTTP/1.0\r\n'.format(hostname[0])
             if self.proxy_auth:
                 connect_str += 'Proxy-Authorization: {0}\r\n'.format(self.proxy_auth)
             connect_str += '\r\n'
